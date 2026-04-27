@@ -1,0 +1,121 @@
+# RDP Usage 직원 PC 설치 매뉴얼
+
+## 1. 준비
+
+관리자에게 아래 정보를 받습니다.
+
+```text
+Server URL: http://192.168.0.200:8765
+Token: 관리자에게 받은 Token 값
+```
+
+`Token`은 비밀번호처럼 취급합니다. 회사 내부에서만 사용합니다.
+
+## 2. 파일 복사
+
+직원 PC에 아래 폴더를 만듭니다.
+
+```text
+C:\RdpUsageTool
+```
+
+관리자에게 받은 `client` 폴더를 아래 위치에 복사합니다.
+
+```text
+C:\RdpUsageTool\client
+```
+
+복사 후 아래 파일이 있어야 합니다.
+
+```text
+C:\RdpUsageTool\client\Run-Client.cmd
+C:\RdpUsageTool\client\Install-ClientStartup.cmd
+C:\RdpUsageTool\client\Uninstall-ClientStartup.cmd
+```
+
+## 3. 첫 실행
+
+아래 파일을 더블클릭합니다.
+
+```text
+C:\RdpUsageTool\client\Run-Client.cmd
+```
+
+처음 실행하면 설정 창이 뜹니다.
+
+아래처럼 입력합니다.
+
+```text
+Server URL: http://192.168.0.200:8765
+Token: 관리자에게 받은 Token 값
+Display Name: 본인 이름
+```
+
+입력 후 `Save`를 누릅니다.
+
+## 4. 자동 실행 설정
+
+컴퓨터를 다시 켜도 자동 실행되도록 아래 파일을 더블클릭합니다.
+
+```text
+C:\RdpUsageTool\client\Install-ClientStartup.cmd
+```
+
+이후부터는 직원 PC에 로그인하면 RDP Usage 트레이 앱이 자동 실행됩니다.
+
+## 5. 사용법
+
+화면 오른쪽 아래 트레이 영역에서 `RDP Usage` 아이콘을 찾습니다.
+
+아이콘이 안 보이면 `^` 버튼을 눌러 숨겨진 아이콘을 확인합니다.
+
+상태 창 열기:
+
+```text
+트레이 아이콘 더블클릭
+```
+
+또는:
+
+```text
+트레이 아이콘 우클릭 → Open
+```
+
+상태 의미:
+
+```text
+Available: 서버 PC 사용 가능
+Busy: 다른 사람이 서버 PC 사용 중
+```
+
+예약 만들기:
+
+```text
+Open → New → 시간 입력 → Reserve
+```
+
+예약 삭제:
+
+```text
+예약 선택 → Delete
+```
+
+예약 시간이 겹치면 안내창이 뜹니다. 기존 예약 시간을 피해서 다시 예약합니다.
+
+## 6. 자동 실행 끄기
+
+자동 실행을 끄려면 아래 파일을 더블클릭합니다.
+
+```text
+C:\RdpUsageTool\client\Uninstall-ClientStartup.cmd
+```
+
+## 7. 완전 제거
+
+직원 PC에서 완전히 제거하려면 아래 순서대로 진행합니다.
+
+```text
+1. 트레이 아이콘 우클릭 → Exit
+2. C:\RdpUsageTool\client\Uninstall-ClientStartup.cmd 더블클릭
+3. C:\RdpUsageTool 폴더 삭제
+```
