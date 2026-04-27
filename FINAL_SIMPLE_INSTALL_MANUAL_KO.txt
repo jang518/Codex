@@ -6,3 +6,138 @@ RDP Usage 초간단 설치 매뉴얼
 
 Server URL: http://192.168.0.200:8765
 Token: 관리자에게 받은 Token 값
+
+Token은 비밀번호처럼 취급합니다. 회사 내부 직원에게만 공유합니다.
+
+2. 서버 PC 설치
+
+서버 PC에 아래 폴더를 만듭니다.
+
+C:\RdpUsageTool
+
+관리자가 받은 파일 중 server 폴더를 아래 위치에 복사합니다.
+
+C:\RdpUsageTool\server
+
+서버 상태 조회 기능을 설치합니다.
+
+C:\RdpUsageTool\server\Install-Agent.cmd
+
+위 파일을 마우스 오른쪽 클릭 후 관리자 권한으로 실행합니다.
+
+서버 PC에 예약 알림 트레이도 설치합니다.
+
+C:\RdpUsageTool\server\Install-ServerNotifier.cmd
+
+위 파일은 서버 PC에 로그인한 사용자 계정에서 그냥 더블클릭합니다.
+
+설치 후 동작은 아래와 같습니다.
+
+서버 PC를 켜면 서버 상태 조회 기능이 자동 실행됩니다.
+서버 PC에 로그인하면 예약 알림 트레이가 자동 실행됩니다.
+
+3. 직원 PC 설치
+
+직원 PC에 아래 폴더를 만듭니다.
+
+C:\RdpUsageTool
+
+관리자에게 받은 client 폴더를 아래 위치에 복사합니다.
+
+C:\RdpUsageTool\client
+
+처음 한 번 실행합니다.
+
+C:\RdpUsageTool\client\Run-Client.cmd
+
+위 파일을 더블클릭합니다.
+
+처음 실행하면 설정 창이 뜹니다. 아래처럼 입력합니다.
+
+Server URL: http://192.168.0.200:8765
+Token: 관리자에게 받은 Token 값
+Display Name: 본인 이름
+
+입력 후 Save를 누릅니다.
+
+컴퓨터를 다시 켜도 자동 실행되도록 설정합니다.
+
+C:\RdpUsageTool\client\Install-ClientStartup.cmd
+
+위 파일을 더블클릭합니다.
+
+설치 후 동작은 아래와 같습니다.
+
+직원 PC에 로그인하면 RDP Usage 트레이 앱이 자동 실행됩니다.
+
+4. 사용법
+
+화면 오른쪽 아래 트레이 영역에서 RDP Usage 아이콘을 찾습니다.
+
+아이콘이 안 보이면 ^ 버튼을 눌러 숨겨진 아이콘을 확인합니다.
+
+상태 창 열기:
+
+트레이 아이콘 더블클릭
+
+또는:
+
+트레이 아이콘 우클릭 -> Open
+
+상태 의미:
+
+Available: 서버 PC 사용 가능
+Busy: 다른 사람이 서버 PC 사용 중
+
+예약 만들기:
+
+Open -> New -> 시간 입력 -> Reserve
+
+예약 삭제:
+
+예약 선택 -> Delete
+
+예약 시간이 겹치면 안내창이 뜹니다. 기존 예약 시간을 피해서 다시 예약합니다.
+
+5. 자동 실행 끄기
+
+직원 PC에서 자동 실행을 끄려면 아래 파일을 더블클릭합니다.
+
+C:\RdpUsageTool\client\Uninstall-ClientStartup.cmd
+
+서버 PC에서 예약 알림 트레이 자동 실행을 끄려면 아래 파일을 더블클릭합니다.
+
+C:\RdpUsageTool\server\Uninstall-ServerNotifier.cmd
+
+서버 PC에서 서버 상태 조회 기능까지 끄려면 아래 파일을 마우스 오른쪽 클릭 후 관리자 권한으로 실행합니다.
+
+C:\RdpUsageTool\server\Uninstall-Agent.cmd
+
+6. 완전 제거
+
+직원 PC:
+
+1. 트레이 아이콘 우클릭 -> Exit
+2. C:\RdpUsageTool\client\Uninstall-ClientStartup.cmd 더블클릭
+3. C:\RdpUsageTool 폴더 삭제
+
+서버 PC:
+
+1. 트레이 아이콘 우클릭 -> Exit
+2. C:\RdpUsageTool\server\Uninstall-ServerNotifier.cmd 더블클릭
+3. C:\RdpUsageTool\server\Uninstall-Agent.cmd 관리자 권한으로 실행
+4. C:\RdpUsageTool 폴더 삭제
+
+7. 문제가 있을 때
+
+직원 PC에서 상태가 안 보이면 설정을 다시 확인합니다.
+
+트레이 아이콘 우클릭 -> Settings
+
+확인할 값:
+
+Server URL: http://192.168.0.200:8765
+Token: 관리자에게 받은 Token 값
+Display Name: 본인 이름
+
+그래도 안 되면 관리자에게 문의합니다.
