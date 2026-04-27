@@ -1,0 +1,5 @@
+server/data/
+server/agent-config.json
+client/client-config.json
+out/
+*.log
