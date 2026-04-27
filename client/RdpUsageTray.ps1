@@ -197,6 +197,85 @@ function Show-Balloon {
     $script:NotifyIcon.ShowBalloonTip(5000)
 }
 
+function Show-SettingsDialog {
+    $form = New-Object Windows.Forms.Form
+    $form.Text = 'RDP Usage Settings'
+    $form.StartPosition = 'CenterScreen'
+    $form.FormBorderStyle = 'FixedDialog'
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+    $form.ClientSize = New-Object Drawing.Size(460, 190)
+
+    $serverLabel = New-Object Windows.Forms.Label
+    $serverLabel.Text = 'Server URL'
+    $serverLabel.Location = New-Object Drawing.Point(16, 22)
+    $serverLabel.AutoSize = $true
+    $form.Controls.Add($serverLabel)
+
+    $serverBox = New-Object Windows.Forms.TextBox
+    $serverBox.Location = New-Object Drawing.Point(130, 18)
+    $serverBox.Size = New-Object Drawing.Size(300, 24)
+    $serverBox.Text = [string]$script:Config.serverUrl
+    $form.Controls.Add($serverBox)
+
+    $tokenLabel = New-Object Windows.Forms.Label
+    $tokenLabel.Text = 'Token'
+    $tokenLabel.Location = New-Object Drawing.Point(16, 62)
+    $tokenLabel.AutoSize = $true
+    $form.Controls.Add($tokenLabel)
+
+    $tokenBox = New-Object Windows.Forms.TextBox
+    $tokenBox.Location = New-Object Drawing.Point(130, 58)
+    $tokenBox.Size = New-Object Drawing.Size(300, 24)
+    $tokenBox.Text = [string]$script:Config.token
+    $tokenBox.UseSystemPasswordChar = $true
+    $form.Controls.Add($tokenBox)
+
+    $nameLabel = New-Object Windows.Forms.Label
+    $nameLabel.Text = 'Display Name'
+    $nameLabel.Location = New-Object Drawing.Point(16, 102)
+    $nameLabel.AutoSize = $true
+    $form.Controls.Add($nameLabel)
+
+    $nameBox = New-Object Windows.Forms.TextBox
+    $nameBox.Location = New-Object Drawing.Point(130, 98)
+    $nameBox.Size = New-Object Drawing.Size(300, 24)
+    $nameBox.Text = [string]$script:Config.displayName
+    $form.Controls.Add($nameBox)
+
+    $okButton = New-Object Windows.Forms.Button
+    $okButton.Text = 'Save'
+    $okButton.Location = New-Object Drawing.Point(270, 145)
+    $okButton.Size = New-Object Drawing.Size(75, 28)
+    $okButton.DialogResult = [Windows.Forms.DialogResult]::OK
+    $form.Controls.Add($okButton)
+
+    $cancelButton = New-Object Windows.Forms.Button
+    $cancelButton.Text = 'Cancel'
+    $cancelButton.Location = New-Object Drawing.Point(355, 145)
+    $cancelButton.Size = New-Object Drawing.Size(75, 28)
+    $cancelButton.DialogResult = [Windows.Forms.DialogResult]::Cancel
+    $form.Controls.Add($cancelButton)
+
+    $form.AcceptButton = $okButton
+    $form.CancelButton = $cancelButton
+
+    if ($form.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+        if ([string]::IsNullOrWhiteSpace($serverBox.Text) -or [string]::IsNullOrWhiteSpace($tokenBox.Text) -or [string]::IsNullOrWhiteSpace($nameBox.Text)) {
+            [Windows.Forms.MessageBox]::Show('Server URL, Token, and Display Name are required.', 'Settings Error', 'OK', 'Warning') | Out-Null
+            return $false
+        }
+
+        $script:Config.serverUrl = $serverBox.Text.Trim().TrimEnd('/')
+        $script:Config.token = $tokenBox.Text.Trim()
+        $script:Config.displayName = $nameBox.Text.Trim()
+        Write-ClientConfig -Config $script:Config
+        return $true
+    }
+
+    return $false
+}
+
 function Invoke-AgentApi {
     param(
         [Parameter(Mandatory = $true)]
@@ -229,6 +308,86 @@ function ConvertFrom-UtcStringToLocalText {
 
     $dto = [DateTimeOffset]::Parse($Value, [Globalization.CultureInfo]::InvariantCulture)
     return $dto.ToLocalTime().ToString('yyyy-MM-dd HH:mm')
+}
+
+function Get-AgentErrorBody {
+    param([object]$ErrorRecord)
+
+    try {
+        if ($ErrorRecord.ErrorDetails -and -not [string]::IsNullOrWhiteSpace($ErrorRecord.ErrorDetails.Message)) {
+            return $ErrorRecord.ErrorDetails.Message | ConvertFrom-Json
+        }
+    }
+    catch {
+    }
+
+    try {
+        $response = $ErrorRecord.Exception.Response
+        if ($response) {
+            $stream = $response.GetResponseStream()
+            if ($stream) {
+                $reader = New-Object IO.StreamReader($stream)
+                try {
+                    $text = $reader.ReadToEnd()
+                    if (-not [string]::IsNullOrWhiteSpace($text)) {
+                        return $text | ConvertFrom-Json
+                    }
+                }
+                finally {
+                    $reader.Dispose()
+                }
+            }
+        }
+    }
+    catch {
+    }
+
+    return $null
+}
+
+function Get-ReservationFailureMessage {
+    param([object]$ErrorRecord)
+
+    $body = Get-AgentErrorBody -ErrorRecord $ErrorRecord
+    if ($body -and [string]$body.error -eq 'reservation_conflict') {
+        $title = Get-ClientMessage -Name 'reservationConflictTitle' -Fallback 'Reservation Conflict'
+        $range = 'Unknown'
+        $owner = 'Unknown'
+
+        if ($body.conflict) {
+            $start = ConvertFrom-UtcStringToLocalText ([string]$body.conflict.startUtc)
+            $end = ConvertFrom-UtcStringToLocalText ([string]$body.conflict.endUtc)
+            if (-not [string]::IsNullOrWhiteSpace($start) -and -not [string]::IsNullOrWhiteSpace($end)) {
+                $range = "$start - $end"
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$body.conflict.owner)) {
+                $owner = [string]$body.conflict.owner
+            }
+        }
+
+        $template = Get-ClientMessage `
+            -Name 'reservationConflictMessage' `
+            -Fallback "The selected time overlaps an existing reservation.`n`nExisting reservation: {0}`nOwner: {1}`n`nPlease choose a different time."
+
+        return [pscustomobject]@{
+            Title   = $title
+            Message = [string]::Format($template, $range, $owner)
+        }
+    }
+
+    $message = $ErrorRecord.Exception.Message
+    if ($body -and -not [string]::IsNullOrWhiteSpace([string]$body.message)) {
+        $message = [string]$body.message
+    }
+
+    $failedTemplate = Get-ClientMessage `
+        -Name 'reservationFailedMessage' `
+        -Fallback "The reservation could not be saved.`n`n{0}"
+
+    return [pscustomobject]@{
+        Title   = Get-ClientMessage -Name 'reservationFailedTitle' -Fallback 'Reservation Failed'
+        Message = [string]::Format($failedTemplate, $message)
+    }
 }
 
 function Update-SessionList {
@@ -333,6 +492,237 @@ function Refresh-RdpUsageState {
     }
 }
 
+function Show-NewReservationDialog {
+    $form = New-Object Windows.Forms.Form
+    $form.Text = 'New Reservation'
+    $form.StartPosition = 'CenterParent'
+    $form.FormBorderStyle = 'FixedDialog'
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+    $form.ClientSize = New-Object Drawing.Size(430, 240)
+
+    $ownerLabel = New-Object Windows.Forms.Label
+    $ownerLabel.Text = 'Owner'
+    $ownerLabel.Location = New-Object Drawing.Point(16, 22)
+    $ownerLabel.AutoSize = $true
+    $form.Controls.Add($ownerLabel)
+
+    $ownerBox = New-Object Windows.Forms.TextBox
+    $ownerBox.Location = New-Object Drawing.Point(120, 18)
+    $ownerBox.Size = New-Object Drawing.Size(280, 24)
+    $ownerBox.Text = [string]$script:Config.displayName
+    $form.Controls.Add($ownerBox)
+
+    $startLabel = New-Object Windows.Forms.Label
+    $startLabel.Text = 'Start'
+    $startLabel.Location = New-Object Drawing.Point(16, 62)
+    $startLabel.AutoSize = $true
+    $form.Controls.Add($startLabel)
+
+    $startPicker = New-Object Windows.Forms.DateTimePicker
+    $startPicker.Location = New-Object Drawing.Point(120, 58)
+    $startPicker.Size = New-Object Drawing.Size(180, 24)
+    $startPicker.Format = [Windows.Forms.DateTimePickerFormat]::Custom
+    $startPicker.CustomFormat = 'yyyy-MM-dd HH:mm'
+    $startPicker.Value = (Get-Date).AddMinutes(10)
+    $form.Controls.Add($startPicker)
+
+    $endLabel = New-Object Windows.Forms.Label
+    $endLabel.Text = 'End'
+    $endLabel.Location = New-Object Drawing.Point(16, 102)
+    $endLabel.AutoSize = $true
+    $form.Controls.Add($endLabel)
+
+    $endPicker = New-Object Windows.Forms.DateTimePicker
+    $endPicker.Location = New-Object Drawing.Point(120, 98)
+    $endPicker.Size = New-Object Drawing.Size(180, 24)
+    $endPicker.Format = [Windows.Forms.DateTimePickerFormat]::Custom
+    $endPicker.CustomFormat = 'yyyy-MM-dd HH:mm'
+    $endPicker.Value = (Get-Date).AddHours(1)
+    $form.Controls.Add($endPicker)
+
+    $noteLabel = New-Object Windows.Forms.Label
+    $noteLabel.Text = 'Note'
+    $noteLabel.Location = New-Object Drawing.Point(16, 142)
+    $noteLabel.AutoSize = $true
+    $form.Controls.Add($noteLabel)
+
+    $noteBox = New-Object Windows.Forms.TextBox
+    $noteBox.Location = New-Object Drawing.Point(120, 138)
+    $noteBox.Size = New-Object Drawing.Size(280, 24)
+    $form.Controls.Add($noteBox)
+
+    $okButton = New-Object Windows.Forms.Button
+    $okButton.Text = 'Reserve'
+    $okButton.Location = New-Object Drawing.Point(240, 195)
+    $okButton.Size = New-Object Drawing.Size(75, 28)
+    $okButton.DialogResult = [Windows.Forms.DialogResult]::OK
+    $form.Controls.Add($okButton)
+
+    $cancelButton = New-Object Windows.Forms.Button
+    $cancelButton.Text = 'Cancel'
+    $cancelButton.Location = New-Object Drawing.Point(325, 195)
+    $cancelButton.Size = New-Object Drawing.Size(75, 28)
+    $cancelButton.DialogResult = [Windows.Forms.DialogResult]::Cancel
+    $form.Controls.Add($cancelButton)
+
+    $form.AcceptButton = $okButton
+    $form.CancelButton = $cancelButton
+
+    if ($form.ShowDialog($script:MainForm) -eq [Windows.Forms.DialogResult]::OK) {
+        try {
+            $startUtc = ([DateTimeOffset]$startPicker.Value).ToUniversalTime().ToString('o')
+            $endUtc = ([DateTimeOffset]$endPicker.Value).ToUniversalTime().ToString('o')
+
+            Invoke-AgentApi -Method POST -Path '/reservations' -Body ([pscustomobject]@{
+                owner    = $ownerBox.Text.Trim()
+                startUtc = $startUtc
+                endUtc   = $endUtc
+                note     = $noteBox.Text.Trim()
+                clientId = [string]$script:Config.clientId
+            }) | Out-Null
+
+            Refresh-RdpUsageState
+        }
+        catch {
+            $failure = Get-ReservationFailureMessage -ErrorRecord $_
+            [Windows.Forms.MessageBox]::Show($failure.Message, $failure.Title, 'OK', 'Warning') | Out-Null
+        }
+    }
+}
+
+function Remove-SelectedReservation {
+    if ($script:ReservationList.SelectedItems.Count -eq 0) {
+        return
+    }
+
+    $item = $script:ReservationList.SelectedItems[0]
+    $id = [string]$item.Tag
+    if ([Windows.Forms.MessageBox]::Show('Delete the selected reservation?', 'Delete Reservation', 'YesNo', 'Question') -ne [Windows.Forms.DialogResult]::Yes) {
+        return
+    }
+
+    try {
+        Invoke-AgentApi -Method DELETE -Path "/reservations/$id" | Out-Null
+        Refresh-RdpUsageState
+    }
+    catch {
+        [Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Delete Failed', 'OK', 'Warning') | Out-Null
+    }
+}
+
+function Show-MainWindow {
+    if (-not $script:MainForm.Visible) {
+        $script:MainForm.Show()
+    }
+    if ($script:MainForm.WindowState -eq [Windows.Forms.FormWindowState]::Minimized) {
+        $script:MainForm.WindowState = [Windows.Forms.FormWindowState]::Normal
+    }
+    $script:MainForm.Activate()
+}
+
+function New-MainForm {
+    $form = New-Object Windows.Forms.Form
+    $form.Text = 'RDP Usage'
+    $form.StartPosition = 'CenterScreen'
+    $form.ClientSize = New-Object Drawing.Size(760, 520)
+    $form.MinimumSize = New-Object Drawing.Size(700, 460)
+
+    $statusLabel = New-Object Windows.Forms.Label
+    $statusLabel.Text = 'Checking status...'
+    $statusLabel.Location = New-Object Drawing.Point(16, 16)
+    $statusLabel.Size = New-Object Drawing.Size(720, 28)
+    $statusLabel.Font = New-Object Drawing.Font($statusLabel.Font.FontFamily, 11, [Drawing.FontStyle]::Bold)
+    $form.Controls.Add($statusLabel)
+    $script:StatusLabel = $statusLabel
+
+    $sessionLabel = New-Object Windows.Forms.Label
+    $sessionLabel.Text = 'Current RDP Sessions'
+    $sessionLabel.Location = New-Object Drawing.Point(16, 55)
+    $sessionLabel.AutoSize = $true
+    $form.Controls.Add($sessionLabel)
+
+    $sessionList = New-Object Windows.Forms.ListView
+    $sessionList.Location = New-Object Drawing.Point(16, 78)
+    $sessionList.Size = New-Object Drawing.Size(720, 135)
+    $sessionList.Anchor = 'Top,Left,Right'
+    $sessionList.View = [Windows.Forms.View]::Details
+    $sessionList.FullRowSelect = $true
+    $sessionList.GridLines = $true
+    [void]$sessionList.Columns.Add('User', 150)
+    [void]$sessionList.Columns.Add('State', 90)
+    [void]$sessionList.Columns.Add('Client PC', 160)
+    [void]$sessionList.Columns.Add('IP', 130)
+    [void]$sessionList.Columns.Add('Connected At', 160)
+    $form.Controls.Add($sessionList)
+    $script:SessionList = $sessionList
+
+    $reservationLabel = New-Object Windows.Forms.Label
+    $reservationLabel.Text = 'Reservations'
+    $reservationLabel.Location = New-Object Drawing.Point(16, 228)
+    $reservationLabel.AutoSize = $true
+    $form.Controls.Add($reservationLabel)
+
+    $reservationList = New-Object Windows.Forms.ListView
+    $reservationList.Location = New-Object Drawing.Point(16, 251)
+    $reservationList.Size = New-Object Drawing.Size(720, 185)
+    $reservationList.Anchor = 'Top,Bottom,Left,Right'
+    $reservationList.View = [Windows.Forms.View]::Details
+    $reservationList.FullRowSelect = $true
+    $reservationList.GridLines = $true
+    [void]$reservationList.Columns.Add('Start', 150)
+    [void]$reservationList.Columns.Add('End', 150)
+    [void]$reservationList.Columns.Add('Owner', 130)
+    [void]$reservationList.Columns.Add('Note', 270)
+    $form.Controls.Add($reservationList)
+    $script:ReservationList = $reservationList
+
+    $refreshButton = New-Object Windows.Forms.Button
+    $refreshButton.Text = 'Refresh'
+    $refreshButton.Location = New-Object Drawing.Point(16, 455)
+    $refreshButton.Size = New-Object Drawing.Size(90, 30)
+    $refreshButton.Anchor = 'Bottom,Left'
+    $refreshButton.Add_Click({ Refresh-RdpUsageState })
+    $form.Controls.Add($refreshButton)
+
+    $newButton = New-Object Windows.Forms.Button
+    $newButton.Text = 'New'
+    $newButton.Location = New-Object Drawing.Point(116, 455)
+    $newButton.Size = New-Object Drawing.Size(90, 30)
+    $newButton.Anchor = 'Bottom,Left'
+    $newButton.Add_Click({ Show-NewReservationDialog })
+    $form.Controls.Add($newButton)
+
+    $deleteButton = New-Object Windows.Forms.Button
+    $deleteButton.Text = 'Delete'
+    $deleteButton.Location = New-Object Drawing.Point(216, 455)
+    $deleteButton.Size = New-Object Drawing.Size(90, 30)
+    $deleteButton.Anchor = 'Bottom,Left'
+    $deleteButton.Add_Click({ Remove-SelectedReservation })
+    $form.Controls.Add($deleteButton)
+
+    $settingsButton = New-Object Windows.Forms.Button
+    $settingsButton.Text = 'Settings'
+    $settingsButton.Location = New-Object Drawing.Point(646, 455)
+    $settingsButton.Size = New-Object Drawing.Size(90, 30)
+    $settingsButton.Anchor = 'Bottom,Right'
+    $settingsButton.Add_Click({
+        if (Show-SettingsDialog) {
+            Refresh-RdpUsageState
+        }
+    })
+    $form.Controls.Add($settingsButton)
+
+    $form.Add_FormClosing({
+        if (-not $script:ReallyExit) {
+            $_.Cancel = $true
+            $script:MainForm.Hide()
+        }
+    })
+
+    return $form
+}
+
 $script:Messages = Read-ClientMessages
 $script:Config = Read-ClientConfig
 Write-ClientPidFile
@@ -344,11 +734,15 @@ $script:NotifyIcon.Text = 'RDP Usage'
 
 $contextMenu = New-Object Windows.Forms.ContextMenuStrip
 $openItem = $contextMenu.Items.Add('Open')
-$openItem.Add_Click({ if (-not $script:MainForm.Visible) { $script:MainForm.Show() }; $script:MainForm.Activate() })
+$openItem.Add_Click({ Show-MainWindow })
 $refreshItem = $contextMenu.Items.Add('Refresh')
 $refreshItem.Add_Click({ Refresh-RdpUsageState })
 $settingsItem = $contextMenu.Items.Add('Settings')
-$settingsItem.Add_Click({ })
+$settingsItem.Add_Click({
+    if (Show-SettingsDialog) {
+        Refresh-RdpUsageState
+    }
+})
 [void]$contextMenu.Items.Add('-')
 $exitItem = $contextMenu.Items.Add('Exit')
 $exitItem.Add_Click({
@@ -357,45 +751,14 @@ $exitItem.Add_Click({
     [Windows.Forms.Application]::Exit()
 })
 $script:NotifyIcon.ContextMenuStrip = $contextMenu
+$script:NotifyIcon.Add_DoubleClick({ Show-MainWindow })
 
-$script:MainForm = New-Object Windows.Forms.Form
-$script:MainForm.Text = 'RDP Usage'
-$script:MainForm.StartPosition = 'CenterScreen'
-$script:MainForm.ClientSize = New-Object Drawing.Size(760, 520)
+$script:MainForm = New-MainForm
 
-$statusLabel = New-Object Windows.Forms.Label
-$statusLabel.Text = 'Checking status...'
-$statusLabel.Location = New-Object Drawing.Point(16, 16)
-$statusLabel.Size = New-Object Drawing.Size(720, 28)
-$script:MainForm.Controls.Add($statusLabel)
-$script:StatusLabel = $statusLabel
-
-$sessionList = New-Object Windows.Forms.ListView
-$sessionList.Location = New-Object Drawing.Point(16, 78)
-$sessionList.Size = New-Object Drawing.Size(720, 135)
-$sessionList.View = [Windows.Forms.View]::Details
-$sessionList.FullRowSelect = $true
-$sessionList.GridLines = $true
-[void]$sessionList.Columns.Add('User', 150)
-[void]$sessionList.Columns.Add('State', 90)
-[void]$sessionList.Columns.Add('Client PC', 160)
-[void]$sessionList.Columns.Add('IP', 130)
-[void]$sessionList.Columns.Add('Connected At', 160)
-$script:MainForm.Controls.Add($sessionList)
-$script:SessionList = $sessionList
-
-$reservationList = New-Object Windows.Forms.ListView
-$reservationList.Location = New-Object Drawing.Point(16, 251)
-$reservationList.Size = New-Object Drawing.Size(720, 185)
-$reservationList.View = [Windows.Forms.View]::Details
-$reservationList.FullRowSelect = $true
-$reservationList.GridLines = $true
-[void]$reservationList.Columns.Add('Start', 150)
-[void]$reservationList.Columns.Add('End', 150)
-[void]$reservationList.Columns.Add('Owner', 130)
-[void]$reservationList.Columns.Add('Note', 270)
-$script:MainForm.Controls.Add($reservationList)
-$script:ReservationList = $reservationList
+$initialSetupCompleted = $false
+if ([string]::IsNullOrWhiteSpace($script:Config.token) -or [string]$script:Config.serverUrl -eq 'http://SERVER-PC:8765') {
+    $initialSetupCompleted = Show-SettingsDialog
+}
 
 $timer = New-Object Windows.Forms.Timer
 $timer.Interval = [Math]::Max(5, [int]$script:Config.pollSeconds) * 1000
@@ -403,6 +766,11 @@ $timer.Add_Tick({ Refresh-RdpUsageState })
 $timer.Start()
 
 Refresh-RdpUsageState
+if ($initialSetupCompleted) {
+    Show-MainWindow
+    Show-Balloon -Title 'RDP Usage' -Message 'Settings saved. The status window is open.'
+}
+
 [Windows.Forms.Application]::Run()
 
 $timer.Stop()
