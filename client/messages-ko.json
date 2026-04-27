@@ -1,7 +1,6 @@
 {
   "reservationConflictTitle": "예약 시간 중복",
-  "reservationConflictIntro": "선택한 예약 시간이 기존 예약과 겹칩니다.",
-  "reservationConflictExisting": "기존 예약",
-  "reservationConflictOwner": "예약자",
-  "reservationConflictRetry": "새로운 시간으로 다시 예약해 주세요."
+  "reservationConflictMessage": "선택한 예약 시간이 기존 예약과 겹칩니다.\n\n기존 예약: {0}\n예약자: {1}\n\n새로운 시간으로 다시 예약해 주세요.",
+  "reservationFailedTitle": "예약 실패",
+  "reservationFailedMessage": "예약을 저장하지 못했습니다.\n\n{0}"
 }
