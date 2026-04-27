@@ -1,0 +1,5 @@
+{
+  "Port": 8765,
+  "Token": "replace-with-a-long-random-token",
+  "DataPath": "data\\agent-store.json"
+}
