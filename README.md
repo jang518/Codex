@@ -127,9 +127,42 @@ cd C:\RdpUsageTool
 .\tools\Get-RdpUsageMemory.cmd
 ```
 
+표시 항목:
+
+- `WorkingSetMB`: 현재 RAM에 올라와 있는 메모리
+- `PrivateMB`: 해당 프로세스가 개인적으로 할당한 메모리
+- `TOTAL`: 실행 중인 RDP Usage 관련 프로세스 합계
+
+PID 파일이 아직 없으면 앱을 최신 파일로 교체한 뒤 한 번 재시작합니다. 명령줄 기반 보조 검색이 필요하면 `-IncludeCommandLineFallback` 옵션을 사용할 수 있습니다.
+
+## exe 패키징
+
+현재 저장소의 클라이언트는 관리자 권한 없이 실행 가능한 포터블 PowerShell 앱입니다. 단일 exe가 필요하면 PS2EXE가 설치된 빌드 PC에서:
+
+```powershell
+.\packaging\Build-ClientExe.ps1
+```
+
 ## 운영 메모
 
 - Windows 10/11 Pro의 RDP 동시 접속 제한을 변경하지 않습니다.
 - 예약은 직원 간 조율용이며 실제 접속 차단 기능은 없습니다.
+- 개인별 Windows 계정으로 RDP에 로그인해야 현재 접속자 이름이 정확히 표시됩니다.
 - 종료 시간이 지난 예약은 직원 PC의 예약 목록에서 다음 새로고침 때 자동으로 사라집니다.
-- 예약 알림은 서버 PC에 로그인된 사용자 세션에서 실행되는 `RdpUsageServerNotifier`가 표시합니다.
+- 예약 알림은 서버 PC에 로그인된 사용자 세션에서 실행되는 `RdpUsageServerNotifier`가 표시합니다. 서버 PC에 아무도 로그인하지 않았거나 알림 앱이 실행 중이 아니면 화면 알림은 보이지 않습니다.
+- 예약 시간이 겹치면 직원 PC에 기존 예약 시간과 예약자를 알려주는 안내창이 표시됩니다.
+- 직원 PC 트레이 앱은 `Install-ClientStartup.cmd`를 실행한 Windows 사용자 계정으로 로그인할 때 자동 실행됩니다.
+- 연결이 끊긴 `Disconnected` RDP 세션은 현재 사용자 목록에 표시하지 않습니다. 진단이 필요할 때만 `/status` 응답의 `allSessions`에서 확인할 수 있습니다.
+- 서버 에이전트는 `TcpListener` 기반의 작은 HTTP 서버로 동작하므로 1024 이상의 포트를 사용하는 것을 권장합니다.
+- 대상 PC의 전원 관리 설정에서 절전 모드가 꺼져 있어야 에이전트가 안정적으로 응답합니다.
+
+## 문제 해결
+
+클라이언트 창은 열리지만 RDP 접속자가 표시되지 않으면 서버 PC의 파일을 최신 버전으로 교체한 뒤 `.\server\Restart-Agent.cmd`를 실행합니다. 최신 버전은 RDP로 분류된 세션뿐 아니라 로그인된 Windows 사용자 세션도 함께 표시합니다.
+
+직원 PC에서 서버 응답을 직접 확인하려면:
+
+```powershell
+$headers = @{ 'X-Rdp-Token' = '서버에서_출력된_TOKEN' }
+Invoke-RestMethod -Uri 'http://서버PC이름:8765/status' -Headers $headers | ConvertTo-Json -Depth 8
+```
